@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"database/sql"
@@ -7,10 +7,16 @@ import (
 	"os"
 	"path/filepath"
 
+	task "github.com/nasik90/go_final_project/internal/entities"
 	_ "modernc.org/sqlite"
 )
 
-func checkDatabaseExistence(dbName string) bool {
+type (
+	DbConnection *sql.DB
+	Store        struct{ DbConnection *sql.DB }
+)
+
+func СheckDatabaseExistence(dbName string) bool {
 	appPath, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
@@ -27,7 +33,7 @@ func checkDatabaseExistence(dbName string) bool {
 	return databaseExists
 }
 
-func createDatabase(dbName string) {
+func СreateDatabase(dbName string) (DbConnection, error) {
 	_, err := os.Create(dbName)
 	if err != nil {
 		log.Fatal(err)
@@ -43,16 +49,25 @@ func createDatabase(dbName string) {
 	queryText := "CREATE TABLE scheduler (id integer PRIMARY KEY, date, title, comment, repeat text)"
 
 	db.Exec(queryText)
+
+	return db, err
 }
 
-func insertTask(task Task) (int64, error) {
-
-	db, err := sql.Open("sqlite", DbName)
+func OpenConnection(dbName string) (Store, error) {
+	var s Store
+	db, err := sql.Open("sqlite", dbName)
 	if err != nil {
-		return 0, err
+		return s, err
 	}
+	s.DbConnection = db
+	return s, err
+}
 
-	defer db.Close()
+func (storage *Store) CloseConnection() {
+	storage.DbConnection.Close()
+}
+
+func InsertTask(db *sql.DB, task task.Task) (int64, error) {
 
 	queryText := "INSERT INTO scheduler(date, title, comment, repeat) VALUES (:date, :title, :comment, :repeat)"
 
@@ -74,16 +89,9 @@ func insertTask(task Task) (int64, error) {
 	return id, nil
 }
 
-func getTasks(dbName string) (tasks []Task, err error) {
+func getTasks(db *sql.DB, dbName string) (tasks []task.Task, err error) {
 
-	var task Task
-
-	db, err := sql.Open("sqlite", dbName)
-	if err != nil {
-		return tasks, err
-	}
-
-	defer db.Close()
+	var task task.Task
 
 	queryText := "SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date"
 
@@ -102,14 +110,7 @@ func getTasks(dbName string) (tasks []Task, err error) {
 
 }
 
-func getTask(dbName string, id int) (task Task, err error) {
-
-	db, err := sql.Open("sqlite", dbName)
-	if err != nil {
-		return task, err
-	}
-
-	defer db.Close()
+func getTask(db *sql.DB, dbName string, id int) (task task.Task, err error) {
 
 	queryText := "SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ? ORDER BY date"
 
@@ -130,13 +131,7 @@ func getTask(dbName string, id int) (task Task, err error) {
 
 }
 
-func updateTask(task Task) error {
-	db, err := sql.Open("sqlite", DbName)
-	if err != nil {
-		return err
-	}
-
-	defer db.Close()
+func updateTask(db *sql.DB, task task.Task) error {
 
 	queryText := "UPDATE scheduler SET date =:date, title = :title, comment = :comment, repeat = :repeat WHERE id = :id"
 
@@ -155,13 +150,7 @@ func updateTask(task Task) error {
 	return err
 }
 
-func deleteTask(id int) error {
-	db, err := sql.Open("sqlite", DbName)
-	if err != nil {
-		return err
-	}
-
-	defer db.Close()
+func deleteTask(db *sql.DB, id int) error {
 
 	queryText := "DELETE FROM scheduler WHERE id = :id"
 
