@@ -6,8 +6,11 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
+
+	"github.com/golang-jwt/jwt"
 )
 
 type ResponseErr struct {
@@ -276,6 +279,78 @@ func handleDeleteTask(res http.ResponseWriter, req *http.Request) {
 	}
 
 	writeResponse(res, resp)
+}
+
+func handleSign(res http.ResponseWriter, req *http.Request) {
+	var (
+		buf        bytes.Buffer
+		resp       []byte
+		PassStruct struct {
+			Password string `json:"password"`
+		}
+		signedToken string
+	)
+	_, err := buf.ReadFrom(req.Body)
+	if err == nil {
+		err = json.Unmarshal(buf.Bytes(), &PassStruct)
+	}
+
+	if err == nil {
+		pass := PassStruct.Password
+		truePass := os.Getenv("TODO_PASSWORD")
+		if pass == truePass {
+			secret := []byte(pass)
+			jwtToken := jwt.New(jwt.SigningMethodHS256)
+			signedToken, err = jwtToken.SignedString(secret)
+		} else {
+			err = errors.New("Неверный пароль")
+		}
+	}
+
+	if err == nil {
+		var ResponseToken struct {
+			Token string `json:"token"`
+		}
+		ResponseToken.Token = signedToken
+		resp, err = json.Marshal(ResponseToken)
+	}
+
+	if err != nil {
+		resp = errorResponse(res, err)
+	}
+
+	writeResponse(res, resp)
+}
+
+func auth(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// смотрим наличие пароля
+		pass := os.Getenv("TODO_PASSWORD")
+		if len(pass) > 0 {
+			var token string // JWT-токен из куки
+			// получаем куку
+			cookie, err := r.Cookie("token")
+			if err == nil {
+				token = cookie.Value
+			}
+			var valid bool
+			// здесь код для валидации и проверки JWT-токена
+			secret := []byte(pass)
+			jwtToken := jwt.New(jwt.SigningMethodHS256)
+			signedToken, err := jwtToken.SignedString(secret)
+
+			if signedToken == token {
+				valid = true
+			}
+
+			if !valid {
+				// возвращаем ошибку авторизации 401
+				http.Error(w, "Authentification required", http.StatusUnauthorized)
+				return
+			}
+		}
+		next(w, r)
+	})
 }
 
 func writeResponse(res http.ResponseWriter, resp []byte) {

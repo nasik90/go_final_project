@@ -44,12 +44,13 @@ func main() {
 	webDir := "web"
 	r.Handle("/*", http.FileServer(http.Dir(webDir)))
 	r.Get("/api/nextdate", handleNextDate)
-	r.Post("/api/task", handleAddTask)
-	r.Get("/api/tasks", handleGetTasks)
-	r.Get("/api/task", handleGetTask)
-	r.Put("/api/task", handleUpdateTask)
-	r.Post("/api/task/done", handleDoneTask)
-	r.Delete("/api/task", handleDeleteTask)
+	r.Post("/api/task", auth(handleAddTask))
+	r.Get("/api/tasks", auth(handleGetTasks))
+	r.Get("/api/task", auth(handleGetTask))
+	r.Put("/api/task", auth(handleUpdateTask))
+	r.Post("/api/task/done", auth(handleDoneTask))
+	r.Delete("/api/task", auth(handleDeleteTask))
+	r.Post("/api/signin", handleSign)
 
 	port := os.Getenv("TODO_PORT")
 	if port == "" {
