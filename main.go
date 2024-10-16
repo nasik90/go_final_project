@@ -1,120 +1,82 @@
 package main
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
+	"log"
 	"net/http"
-	"strconv"
-	"strings"
-	"time"
+	"os"
+	"path/filepath"
 
-	"github.com/nasik90/go_final_project/internal/api"
-	task "github.com/nasik90/go_final_project/internal/entities"
-	"github.com/nasik90/go_final_project/internal/storage"
+	"github.com/go-chi/chi"
 )
 
 const (
-	dbName = "scheduler.db"
+	dbNameDefault = "scheduler.db"
+	tasksLimit    = 50
+	DateTemplate  = "20060102"
+	portByDefault = "7540"
 )
 
 var (
-	//DB storage.DbConnection
-	DB *sql.DB
+	db store
 )
-
-// type Task struct {
-// 	Id      string `json:"id"`
-// 	Date    string `json:"date"`
-// 	Title   string `json:"title"`
-// 	Comment string `json:"comment"`
-// 	Repeat  string `json:"repeat"`
-// }
 
 func main() {
 
-	//r := chi.NewRouter()
-	var store storage.Store
-	//DB, _ = storage.OpenConnection(dbName)
-	if storage.СheckDatabaseExistence(dbName) {
-		//DB, _ = storage.OpenConnection(dbName)
-		store, _ = storage.OpenConnection(dbName)
+	var err error
+
+	r := chi.NewRouter()
+
+	dbFilePath := getDbFileNameAndPath()
+
+	if checkDatabaseExistence(dbFilePath) {
+		db, err = openConnection(dbFilePath)
 	} else {
-		DB, _ = storage.СreateDatabase(dbName)
-		store, _ = storage.OpenConnection(dbName)
+		db, err = createDatabase(dbFilePath)
 	}
-	defer store.CloseConnection()
 
-	// webDir := "web"
-	// r.Handle("/*", http.FileServer(http.Dir(webDir)))
-	// //r.Get("/api/nextdate", handleNextDate)
-	// r.Post("/api/task", handleAddTask)
-	// // r.Get("/api/tasks", handleGetTasks)
-	// // r.Get("/api/task", handleGetTask)
-	// // r.Put("/apsi/task", handleUpdateTask)
-	// // r.Post("/api/task/done", handleDoneTask)
-	// // r.Delete("/api/task", handleDeleteTask)
-
-	r := api.ApiHandlers(store)
-
-	err := http.ListenAndServe(":7540", r)
 	if err != nil {
-		panic(err)
-	}
-}
-
-func checkAddingTask(task *task.Task) error {
-
-	var errGlobal error
-
-	if task.Title == "" {
-		errGlobal = errors.Join(errGlobal, fmt.Errorf("title is empty"))
+		log.Fatal(err)
 	}
 
-	_, err := time.Parse(DateTemplate, task.Date)
+	defer db.closeConnection()
+
+	webDir := "web"
+	r.Handle("/*", http.FileServer(http.Dir(webDir)))
+	r.Get("/api/nextdate", handleNextDate)
+	r.Post("/api/task", handleAddTask)
+	r.Get("/api/tasks", handleGetTasks)
+	r.Get("/api/task", handleGetTask)
+	r.Put("/api/task", handleUpdateTask)
+	r.Post("/api/task/done", handleDoneTask)
+	r.Delete("/api/task", handleDeleteTask)
+
+	port := os.Getenv("TODO_PORT")
+	if port == "" {
+		port = portByDefault
+	}
+
+	err = http.ListenAndServe(":"+port, r)
 	if err != nil {
-		errGlobal = errors.Join(errGlobal, fmt.Errorf("date format error"))
+		log.Fatal(err)
 	}
 
-	return errGlobal
+	fmt.Println(dbFilePath)
 
 }
 
-func checkNextDateArgs(date string, repeat string) error {
+func getDbFileNameAndPath() string {
 
-	var errGlobal error
+	dbFilePath := os.Getenv("TODO_DBFILE")
 
-	if repeat == "" {
-		errGlobal = errors.Join(errGlobal, fmt.Errorf("repeat is empty"))
-	}
-
-	_, err := time.Parse(DateTemplate, date)
-	if err != nil {
-		errGlobal = errors.Join(errGlobal, err)
-	}
-
-	repeatSplitted := strings.Split(repeat, " ")
-	firstSymbol := repeatSplitted[0]
-	secondSymbol := ""
-	if len(repeatSplitted) > 1 {
-		secondSymbol = repeatSplitted[1]
-	}
-
-	if !strings.Contains("yd", firstSymbol) {
-		errGlobal = errors.Join(errGlobal, fmt.Errorf("repeat format error"))
-	}
-	if strings.Contains("d", firstSymbol) && firstSymbol == "" {
-		errGlobal = errors.Join(errGlobal, fmt.Errorf("repeat format error"))
-	}
-	if firstSymbol == "d" {
-		secondSymbolInt, err := strconv.Atoi(secondSymbol)
+	if dbFilePath == "" {
+		appPath, err := os.Executable()
 		if err != nil {
-			errGlobal = errors.Join(errGlobal, err)
+			log.Fatal(err)
 		}
-		if secondSymbolInt > 400 {
-			errGlobal = errors.Join(errGlobal, fmt.Errorf("repeat format error"))
-		}
+
+		dbFilePath = filepath.Join(filepath.Dir(appPath), dbNameDefault)
 	}
 
-	return errGlobal
+	return dbFilePath
 }

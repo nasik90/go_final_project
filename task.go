@@ -1,4 +1,4 @@
-package task
+package main
 
 type Task struct {
 	Id      string `json:"id"`
@@ -7,7 +7,3 @@ type Task struct {
 	Comment string `json:"comment"`
 	Repeat  string `json:"repeat"`
 }
-
-const (
-	DateTemplate = "20060102"
-)
